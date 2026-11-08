@@ -42,9 +42,15 @@ def zcyl(r, z0, z1, x=0.0, y=0.0):
     return bd.Pos(x, y, z0) * bd.Cylinder(r, z1 - z0, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
 
 
+def ccw(pts):
+    """頂點排成逆時針：擠出方向才會照面法線 +Z（順時針會擠到反方向）。"""
+    area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
+    return list(pts) if area > 0 else list(pts)[::-1]
+
+
 def xz_prism(pts, y0, y1):
     """XZ 平面上的多邊形（點 = (x, z)），沿 Y 從 y0 擠到 y1。"""
-    face = bd.Polygon(*pts, align=None)
+    face = bd.Polygon(*ccw(pts), align=None)
     return bd.Pos(0, y1, 0) * bd.Rot(90, 0, 0) * bd.extrude(face, y1 - y0)
 
 
@@ -121,6 +127,11 @@ def front_housing_body():
     for x in (130.0, 175.0):
         for y in (-42.0, -0.5):
             body -= box(x - 2, x + 2, y - 1.5, y + 1.5, BAY_Z[0] - 1, BAY_Z[0] + WALL + 1)
+    # 緊急停止線管扣（外耳板外側）：每台車的線管從座管這邊卡進來，再往後接到塔外牆的線管座
+    clip = box(120.0, 130.0, CHEEK_Y_OUT[1] - 0.01, CHEEK_Y_OUT[1] + 9.0, -37.0, -23.0)
+    clip -= xcyl(2.8, 119.0, 131.0, y=CHEEK_Y_OUT[1] + 5.0, z=-30.0)
+    clip -= box(119.0, 131.0, CHEEK_Y_OUT[1] + 2.9, CHEEK_Y_OUT[1] + 7.1, -30.0, -22.0)     # 4.2 寬開口，Ø5 線管壓入
+    body += clip
     body.label = "housing_front"
     body.color = PETG_CF
     return body
@@ -181,9 +192,9 @@ def rear_housing_body():
         t = xz_stadium((Cc[0], Cc[1]), (Cc[0] + 10, DECK_Z), 30.0, y0, y1) + box(x0, Cc[0], y0, y1, BAY_Z[1] - 4, Cc[1] + 33)
         tower = t if tower is None else tower + t
     roof = box(Cc[0] - 30, Cc[0] + 30, TOWER_IN[0], TOWER_OUT[1], Cc[1] + 29, Cc[1] + 33)
-    # 抬臂桿擋塊（工作位置時桿子靠在這）
-    stop = box(312.0, 334.0, DECK_Y[1] - 0.01, TOWER_OUT[1] + 7.5, DECK_Z - 4.0, Cc[1] - 7.2)
-    body = flange + slope + deck + batt_wall + rib + tower + roof + stop
+    # 抬臂桿擋塊（工作位置時桿子靠在這）＋緊急停止觸發桿支架與休止擋；塔外牆的拉線線管座
+    stop = estop_bracket(Cc)
+    body = flange + slope + deck + batt_wall + rib + tower + roof + stop + estop_cable_stop()
     # 氣壓棒穿過的開口、偏心桿與塔之間的空間
     body -= box(x0 + 6.01, 300.0, TOWER_IN[1], TOWER_OUT[0], -40.0, Cc[1] + 28.9)
     # 偏心軸 M8（穿內牆），外牆開 Ø23 給轂
@@ -199,9 +210,82 @@ def rear_housing_body():
         body -= ycyl(M5_CLR / 2, P.BATT_WALL_Y[0] - 1, P.BATT_WALL_Y[1] + 1, DOCK_C[0] + a, DOCK_C[1] + b)
     # 電池線穿孔
     body -= ycyl(6.0, P.BATT_WALL_Y[0] - 1, P.BATT_WALL_Y[1] + 7, BATT_X[0] + 18, 30.0)
+    # 觸發桿軸：M4 熱壓螺母（Ø5.6 × 8），M4×14 從觸發桿外側鎖進來當軸
+    kx, kz = P.ESTOP_K
+    body -= ycyl(5.6 / 2, P.ESTOP_Y[0] - 8.5, P.ESTOP_Y[0] + 0.01, kx, kz)
+    body = estop_cable_stop_cuts(body)
     body.label = "housing_rear"
     body.color = PETG_CF
     return body
+
+
+# ── 緊急停止（機械式）：主機側 ─────────────────────────────────────
+STOP_X = (321.0, 334.0)          # 抬臂把手擋塊：把手工作位置靠在頂面
+
+
+def estop_bracket(Cc):
+    """觸發桿支架（軸在內側、觸發桿在外側的同一平面轉動）、把手擋塊、拉線臂休止擋。"""
+    kx, kz = P.ESTOP_K
+    y0, y1 = P.ESTOP_Y
+    top = Cc[1] - 7.2                                                    # 把手下緣（Cc − 7）再低 0.2
+    inboard = box(kx - 6.0, STOP_X[0] + 0.01, 62.0, y0 - 0.5, 56.0, DECK_Z + 0.01)
+    stopblk = box(STOP_X[0], STOP_X[1], 62.0, y1, 56.0, top)
+    # 休止擋：拉線端的線頭座往後靠在這（沒接線時觸發桿也不會亂晃），觸發時往前離開
+    lug = box(kx + 6.8, STOP_X[0] + 3.0, y0, y1, 34.0, 46.0) + box(STOP_X[0], STOP_X[0] + 3.0, y0, y1, 45.9, 56.01)
+    return inboard + stopblk + lug
+
+
+def estop_cable_stop():
+    x0, x1 = P.ESTOP_STOP_X
+    y, z = P.ESTOP_CABLE_Y, P.ESTOP_CABLE_Z
+    return box(x0, x1, TOWER_OUT[1] - 0.01, y + 4.0, z - 6.0, z + 6.0)
+
+
+def estop_cable_stop_cuts(body):
+    """線管頭 Ø6.4 從前方頂住，內線往後穿出；兩段都從外側開縫，線不用拆就能卡進去。"""
+    x0, x1 = P.ESTOP_STOP_X
+    y, z = P.ESTOP_CABLE_Y, P.ESTOP_CABLE_Z
+    body -= xcyl(P.FERRULE_D / 2, x0 - 1, x0 + 6.0, y=y, z=z)
+    body -= xcyl(1.1, x0 + 5.9, x1 + 1, y=y, z=z)
+    body -= box(x0 - 1, x0 + 6.0, y, y + 10, z - 2.9, z + 2.9)           # 5.8 寬：線管頭 6.0–6.4 壓進去卡住
+    body -= box(x0 + 5.9, x1 + 1, y, y + 10, z - 0.8, z + 0.8)           # 內線縫
+    return body
+
+
+def kicker_body(theta=0.0):
+    """觸發桿：順時針轉 theta 度。頂墊從下面推抬臂把手，下端拉線臂接剎車線頭（從外側放入）。"""
+    K = P.ESTOP_K
+    y0, y1 = P.ESTOP_Y
+
+    def rot(v):
+        a = math.radians(theta)
+        return (v[0] * math.cos(a) + v[1] * math.sin(a), -v[0] * math.sin(a) + v[1] * math.cos(a))
+
+    pad = add(K, rot(P.ESTOP_PAD))
+    C1 = add(K, rot((0.0, -P.ESTOP_ARM)))
+
+    def taper(a, ra, b, rb):
+        d = (b[0] - a[0], b[1] - a[1])
+        L = math.hypot(*d)
+        nrm = (-d[1] / L, d[0] / L)
+        poly = [add(a, nrm, ra), add(b, nrm, rb), add(b, nrm, -rb), add(a, nrm, -ra)]
+        return xz_prism(poly, y0, y1) + ycyl(ra, y0, y1, *a) + ycyl(rb, y0, y1, *b)
+
+    k = taper(K, 6.5, pad, P.ESTOP_PAD_R) + taper(K, 6.5, C1, 5.0)
+    k += ycyl(6.6, P.ESTOP_NIPPLE_Y[0], P.ESTOP_NIPPLE_Y[1], *C1)
+    k -= ycyl(6.4 / 2, y0 - 1, y1 + 1, *K)          # 套 Ø6×6.0 墊管轉動；M4×14 夾住墊管，不夾觸發桿
+    # 線頭槽：Ø6.6 沿 Y、從外側放入；內線從槽往前穿出。扇形開口涵蓋整個轉角（本體座標 180°–216°）
+    k -= ycyl(P.NIPPLE_D / 2, P.ESTOP_CABLE_Y - P.NIPPLE_L / 2, P.ESTOP_NIPPLE_Y[1] + 1, *C1)
+    ys = (P.ESTOP_CABLE_Y - 1.0 + P.ESTOP_NIPPLE_Y[1] + 1.0) / 2
+    yl = P.ESTOP_NIPPLE_Y[1] + 1.0 - (P.ESTOP_CABLE_Y - 1.0)
+    for a in (180.0, 192.0, 204.0, 216.0):
+        u = rot((math.cos(math.radians(a)), math.sin(math.radians(a))))
+        mid = add(C1, u, 6.0)
+        ang = math.degrees(math.atan2(u[1], u[0]))
+        k -= bd.Pos(mid[0], ys, mid[1]) * bd.Rot(0, -ang, 0) * bd.Box(12.0, yl, 2.2)
+    k.label = "estop_kicker"
+    k.color = "#d62828"
+    return k
 
 
 # ── 擺臂 ─────────────────────────────────────────────────────────
@@ -298,8 +382,8 @@ def crank_parts(pin_deg=CRANK_ENGAGED_DEG):
 
 
 # ── 列印墊片 ─────────────────────────────────────────────────────
-def spacer(od, length, label):
-    s = zcyl(od / 2, 0, length) - zcyl(8.4 / 2, -1, length + 1)
+def spacer(od, length, label, bore=8.4):
+    s = zcyl(od / 2, 0, length) - zcyl(bore / 2, -1, length + 1)
     s.label = label
     s.color = PETG_HF
     return s
@@ -310,8 +394,9 @@ def spacers():
     pivot_len = (HUB_Y[1] - P.BRG_W) - (HUB_Y[0] + P.BRG_W)
     top = (CHEEK_OUT_Y[0] - CHEEK_IN_Y[1] - GS_EYE_W) / 2 - 0.2
     low = (17.0 - GS_EYE_W) / 2 - 0.2
+    kick = spacer(6.0, P.ESTOP_Y[1] - P.ESTOP_Y[0] + 0.5, "spacer_kicker", bore=4.4)
     return [spacer(11.5, pivot_len - 0.1, "spacer_pivot"), spacer(12.0, top, "spacer_eye_top"),
-            spacer(12.0, low, "spacer_eye_low")]
+            spacer(12.0, low, "spacer_eye_low"), kick]
 
 
 # ── TPU 滾輪套 ───────────────────────────────────────────────────
@@ -398,13 +483,16 @@ def makita_dock_and_battery():
 
 
 # ── 主機組件 ─────────────────────────────────────────────────────
-def unit_assembly(phi=ARM_PHI0, engaged=True):
-    """phi：擺臂角度（工作位置 ARM_PHI0，抬起 ARM_PHI0 − ARM_LIFT_DEG）。"""
+def unit_assembly(phi=ARM_PHI0, engaged=True, crank_deg=None, kicker_deg=0.0):
+    """phi：擺臂角度（工作位置 ARM_PHI0，抬起 ARM_PHI0 − ARM_LIFT_DEG）；
+    crank_deg：直接指定曲柄銷角度（預設依 engaged）；kicker_deg：緊急停止觸發桿順時針轉角。"""
     M = P.motor_center(phi)
     d = P.arm_dir(phi)
     B = add(PIVOT, d, P.SPRING_D)
     _, _, Cc, _ = P.spring_points()
     pin_deg = CRANK_ENGAGED_DEG if engaged else CRANK_ENGAGED_DEG + CRANK_TRAVEL_DEG
+    if crank_deg is not None:
+        pin_deg = crank_deg
     crank_in, crank_out, handle, pin_c = crank_parts(pin_deg)
     front, rear, lid = front_housing_body(), rear_housing_body(), bay_lid_body()
     arm = arm_body(phi)
@@ -413,7 +501,8 @@ def unit_assembly(phi=ARM_PHI0, engaged=True):
     gs = gas_spring(pin_c, B)
     brg = [bearing_608(PIVOT, HUB_Y[0]), bearing_608(PIVOT, HUB_Y[1] - P.BRG_W), bearing_608(M, 61.0)]
     dock, batt = makita_dock_and_battery()
-    parts = [front, rear, lid, arm, crank_in, crank_out, handle, sleeve, motor, gs, *brg, vesc_box(), esp_board(), dock, batt]
+    parts = [front, rear, lid, arm, crank_in, crank_out, handle, sleeve, motor, gs, *brg, vesc_box(), esp_board(), dock, batt,
+             kicker_body(kicker_deg)]
     return bd.Compound(children=parts, label="postroller_unit")
 
 
@@ -427,6 +516,13 @@ def unit_lifted():
     return unit_assembly(ARM_PHI0 - P.ARM_LIFT_DEG, engaged=False)
 
 
+@model
+def unit_estop_tripped():
+    """緊急停止拉桿拉到底的瞬間：觸發桿轉 32.4°，把手被頂到過死點 16°（之後氣壓棒會自己把它推到抬起）。"""
+    return unit_assembly(crank_deg=CRANK_ENGAGED_DEG + P.ESTOP_HANDLE_DEG, kicker_deg=P.ESTOP_TRIP_DEG)
+
+
 if __name__ == "__main__":
     unit()
     unit_lifted()
+    unit_estop_tripped()

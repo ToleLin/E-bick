@@ -13,6 +13,7 @@ from pathlib import Path
 import build123d as bd
 
 import params as P
+import estop_lever as L
 import unit as U
 from base import base_front_body, base_rear_body, liner_body
 
@@ -55,9 +56,19 @@ def main():
     write(YMAX_UP * inner, "unit/05_lift_crank_inner_PETG-HF.stl")
     write(YMAX_UP * outer, "unit/06_lift_crank_outer_PETG-HF.stl")       # 曲柄片貼床，轂與六角榫朝上
     write(YMAX_UP * handle, "unit/08_lift_handle_PETG-HF.stl")
-    for sp, n in zip(U.spacers(), ("1", "2", "2")):
+    for sp, n in zip(U.spacers(), ("1", "2", "2", "1")):
         write(sp, f"unit/09_{sp.label}_x{n}_PETG-HF.stl")
     write(YMAX_UP * U.sleeve_body(), "unit/07_roller_sleeve_TPU95A.stl")
+    # 緊急停止：主機上的觸發桿（內側面貼床，線頭座朝上）
+    write(YMAX_UP * U.kicker_body(), "unit/10_estop_kicker_PETG-HF.stl")
+    # 緊急停止：車把拉桿（每台車一支）。設計是裝在車把左半邊；右半邊用鏡像版
+    for side in ("L", "R"):
+        mir = (lambda s: s) if side == "L" else (lambda s: bd.mirror(s, about=bd.Plane.YZ))
+        write(mir(L.mount_lower_body()), f"estop_lever/{side}/estop_lever_lower_{side}_PETG-CF.stl")
+        write(mir(L.blade_body()), f"estop_lever/{side}/estop_lever_blade_{side}_PETG-HF.stl")
+        for d in L.BAR_DIAMETERS:
+            tag = f"{d:.1f}".replace(".", "p")
+            write(mir(L.mount_upper_body(d)), f"estop_lever/{side}/estop_lever_upper_bar{tag}_{side}_PETG-CF.stl")
     # 座管座（每台車一組）
     for d in P.POST_DIAMETERS:
         tag = f"{d:.1f}".replace(".", "p")
