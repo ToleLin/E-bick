@@ -128,9 +128,9 @@ def front_housing_body():
         for y in (-42.0, -0.5):
             body -= box(x - 2, x + 2, y - 1.5, y + 1.5, BAY_Z[0] - 1, BAY_Z[0] + WALL + 1)
     # 緊急停止線管扣（外耳板外側）：每台車的線管從座管這邊卡進來，再往後接到塔外牆的線管座
-    clip = box(120.0, 130.0, CHEEK_Y_OUT[1] - 0.01, CHEEK_Y_OUT[1] + 9.0, -37.0, -23.0)
-    clip -= xcyl(2.8, 119.0, 131.0, y=CHEEK_Y_OUT[1] + 5.0, z=-30.0)
-    clip -= box(119.0, 131.0, CHEEK_Y_OUT[1] + 2.9, CHEEK_Y_OUT[1] + 7.1, -30.0, -22.0)     # 4.2 寬開口，Ø5 線管壓入
+    clip = box(120.0, 130.0, CHEEK_Y_OUT[1] - 0.01, CHEEK_Y_OUT[1] + 12.0, -40.0, -22.0)
+    clip -= box(119.0, 131.0, CHEEK_Y_OUT[1] + 2.5, CHEEK_Y_OUT[1] + 9.5, -33.0, -21.0)     # 7 寬 U 槽：Ø5 線管放進去
+    clip -= xcyl(3.5, 119.0, 131.0, y=CHEEK_Y_OUT[1] + 6.0, z=-33.0)
     body += clip
     body.label = "housing_front"
     body.color = PETG_CF
@@ -212,7 +212,7 @@ def rear_housing_body():
     body -= ycyl(6.0, P.BATT_WALL_Y[0] - 1, P.BATT_WALL_Y[1] + 7, BATT_X[0] + 18, 30.0)
     # 觸發桿軸：M4 熱壓螺母（Ø5.6 × 8），M4×14 從觸發桿外側鎖進來當軸
     kx, kz = P.ESTOP_K
-    body -= ycyl(5.6 / 2, P.ESTOP_Y[0] - 8.5, P.ESTOP_Y[0] + 0.01, kx, kz)
+    body -= ycyl(5.6 / 2, P.ESTOP_Y[0] - P.FIT - 8.0, P.ESTOP_Y[0] - P.FIT + 0.01, kx, kz)
     body = estop_cable_stop_cuts(body)
     body.label = "housing_rear"
     body.color = PETG_CF
@@ -228,7 +228,7 @@ def estop_bracket(Cc):
     kx, kz = P.ESTOP_K
     y0, y1 = P.ESTOP_Y
     top = Cc[1] - 7.2                                                    # 把手下緣（Cc − 7）再低 0.2
-    inboard = box(kx - 6.0, STOP_X[0] + 0.01, 62.0, y0 - 0.5, 56.0, DECK_Z + 0.01)
+    inboard = box(kx - 6.0, STOP_X[0] + 0.01, 62.0, y0 - P.FIT, 56.0, DECK_Z + 0.01)
     stopblk = box(STOP_X[0], STOP_X[1], 62.0, y1, 56.0, top)
     # 休止擋：拉線端的線頭座往後靠在這（沒接線時觸發桿也不會亂晃），觸發時往前離開
     lug = box(kx + 6.8, STOP_X[0] + 3.0, y0, y1, 34.0, 46.0) + box(STOP_X[0], STOP_X[0] + 3.0, y0, y1, 45.9, 56.01)
@@ -242,13 +242,13 @@ def estop_cable_stop():
 
 
 def estop_cable_stop_cuts(body):
-    """線管頭 Ø6.4 從前方頂住，內線往後穿出；兩段都從外側開縫，線不用拆就能卡進去。"""
+    """內線從外側的 3 mm 槽放進來，線管頭再從前方推進 Ø7 座孔；槽比線管頭窄，線管頭不會從側面掉出，
+    靠拉線張力頂住。不靠卡扣，列印尺寸差 1–2 mm 也能用。"""
     x0, x1 = P.ESTOP_STOP_X
     y, z = P.ESTOP_CABLE_Y, P.ESTOP_CABLE_Z
-    body -= xcyl(P.FERRULE_D / 2, x0 - 1, x0 + 6.0, y=y, z=z)
-    body -= xcyl(1.1, x0 + 5.9, x1 + 1, y=y, z=z)
-    body -= box(x0 - 1, x0 + 6.0, y, y + 10, z - 2.9, z + 2.9)           # 5.8 寬：線管頭 6.0–6.4 壓進去卡住
-    body -= box(x0 + 5.9, x1 + 1, y, y + 10, z - 0.8, z + 0.8)           # 內線縫
+    body -= xcyl(P.FERRULE_D / 2, x0 - 1, x0 + 7.0, y=y, z=z)
+    body -= xcyl(P.WIRE_SLOT / 2, x0 + 6.9, x1 + 1, y=y, z=z)
+    body -= box(x0 - 1, x1 + 1, y, y + 10, z - P.WIRE_SLOT / 2, z + P.WIRE_SLOT / 2)
     return body
 
 
@@ -273,7 +273,7 @@ def kicker_body(theta=0.0):
 
     k = taper(K, 6.5, pad, P.ESTOP_PAD_R) + taper(K, 6.5, C1, 5.0)
     k += ycyl(6.6, P.ESTOP_NIPPLE_Y[0], P.ESTOP_NIPPLE_Y[1], *C1)
-    k -= ycyl(6.4 / 2, y0 - 1, y1 + 1, *K)          # 套 Ø6×6.0 墊管轉動；M4×14 夾住墊管，不夾觸發桿
+    k -= ycyl(6.0 / 2 + P.FIT / 2, y0 - 1, y1 + 1, *K)   # 套 Ø6 墊管轉動（直徑間隙 1 mm）；M4×14 夾住墊管，不夾觸發桿
     # 線頭槽：Ø6.6 沿 Y、從外側放入；內線從槽往前穿出。扇形開口涵蓋整個轉角（本體座標 180°–216°）
     k -= ycyl(P.NIPPLE_D / 2, P.ESTOP_CABLE_Y - P.NIPPLE_L / 2, P.ESTOP_NIPPLE_Y[1] + 1, *C1)
     ys = (P.ESTOP_CABLE_Y - 1.0 + P.ESTOP_NIPPLE_Y[1] + 1.0) / 2
@@ -282,7 +282,7 @@ def kicker_body(theta=0.0):
         u = rot((math.cos(math.radians(a)), math.sin(math.radians(a))))
         mid = add(C1, u, 6.0)
         ang = math.degrees(math.atan2(u[1], u[0]))
-        k -= bd.Pos(mid[0], ys, mid[1]) * bd.Rot(0, -ang, 0) * bd.Box(12.0, yl, 2.2)
+        k -= bd.Pos(mid[0], ys, mid[1]) * bd.Rot(0, -ang, 0) * bd.Box(12.0, yl, P.WIRE_SLOT)
     k.label = "estop_kicker"
     k.color = "#d62828"
     return k
@@ -394,7 +394,7 @@ def spacers():
     pivot_len = (HUB_Y[1] - P.BRG_W) - (HUB_Y[0] + P.BRG_W)
     top = (CHEEK_OUT_Y[0] - CHEEK_IN_Y[1] - GS_EYE_W) / 2 - 0.2
     low = (17.0 - GS_EYE_W) / 2 - 0.2
-    kick = spacer(6.0, P.ESTOP_Y[1] - P.ESTOP_Y[0] + 0.5, "spacer_kicker", bore=4.4)
+    kick = spacer(6.0, P.ESTOP_Y[1] - P.ESTOP_Y[0] + P.FIT, "spacer_kicker", bore=4.8)
     return [spacer(11.5, pivot_len - 0.1, "spacer_pivot"), spacer(12.0, top, "spacer_eye_top"),
             spacer(12.0, low, "spacer_eye_low"), kick]
 
