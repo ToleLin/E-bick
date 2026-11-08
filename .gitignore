@@ -1,0 +1,9 @@
+# 暫存與本機產物
+/tmp/
+/PRINT/
+__pycache__/
+*.pyc
+firmware/.pio/
+firmware/.vscode/
+# 本機工作筆記（不公開）
+/工作進度.md
